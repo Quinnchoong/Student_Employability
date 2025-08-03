@@ -1,70 +1,52 @@
-# -*- coding: utf-8 -*-
+# app.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
 from PIL import Image
 
-# 📋 PAGE CONFIGURATION
+# Set page config
 st.set_page_config(page_title="🎓 Student Employability Predictor", layout="centered")
 
-# 📋 CUSTOM CSS
-st.markdown("""
-<style>
-.stApp {
-    background-color: #000000;
-}
-html, body, [class*="css"] {
-    font-size: 14px;
-}
-.block-container {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-}
-</style>
-""", unsafe_allow_html=True)
 
-# 📋 LOAD MODEL & SCALER
+# Load model
 @st.cache_resource
 def load_model():
     try:
-        model = joblib.load("employability_predictor.pkl")
-        scaler = joblib.load("scaler.pkl")
-        return model, scaler
+        model_data = joblib.load("employability_predictor.pkl")
+        model = model_data['model']
+        label_encoder = model_data['label_encoder']
+        feature_names = model_data['feature_names']
+
+        return model, label_encoder, feature_names
     except FileNotFoundError:
-        return None, None
+        return None, None, None
 
-model, scaler = load_model()
 
-if model is None or scaler is None:
-    st.error("⚠️ Model or scaler file not found in the directory.")
+model, label_encoder, feature_columns = load_model()
+
+if model is None:
+    st.error("❌ Model file not found.")
     st.stop()
 
-# 📋 HEADER IMAGE
+# Header Image
 try:
-    image = Image.open("business_people.jpeg")
+    image = Image.open("business_people.png")
     st.image(image, use_container_width=True)
 except FileNotFoundError:
-    st.warning("📷 Header image not found. Skipping...")
+    st.warning("📷 Header image not found.")
 
-# 📋 TITLE
-st.markdown("<h2 style='text-align: center;'>🎓 Student Employability Predictor — SVM Model</h2>", unsafe_allow_html=True)
-st.markdown("Please provide the required input features below:")
+# Title
+st.markdown("<h2 style='text-align: center;'>🎓 Student Employability Predictor — SVM Model</h2>",
+            unsafe_allow_html=True)
 
-# 📋 INPUT FEATURES
-feature_columns = [
-    'GENDER', 'GENERAL_APPEARANCE', 'GENERAL_POINT_AVERAGE',
-    'MANNER_OF_SPEAKING', 'PHYSICAL_CONDITION', 'MENTAL_ALERTNESS',
-    'SELF-CONFIDENCE', 'ABILITY_TO_PRESENT_IDEAS', 'COMMUNICATION_SKILLS',
-    'STUDENT_PERFORMANCE_RATING', 'NO_SKILLS', 'Year_of_Graduate'
-]
-
-# 📋 FORM LAYOUT
+# Input form
 col1, col2, col3 = st.columns(3)
 inputs = {}
 
 with col1:
-    inputs['GENDER'] = st.radio("Gender", [0, 1], format_func=lambda x: "Male" if x == 1 else "Female", index=1)
+    inputs['GENDER'] = st.radio("Gender", [0, 1], format_func=lambda x: "Male" if x == 1 else "Female")
     inputs['GENERAL_APPEARANCE'] = st.slider("General Appearance (1-5)", 1, 5, 3)
     inputs['GENERAL_POINT_AVERAGE'] = st.number_input("GPA (0.0 - 4.0)", 0.0, 4.0, 3.0, 0.01)
     inputs['MANNER_OF_SPEAKING'] = st.slider("Manner of Speaking (1-5)", 1, 5, 3)
@@ -78,33 +60,36 @@ with col2:
 with col3:
     inputs['COMMUNICATION_SKILLS'] = st.slider("Communication Skills (1-5)", 1, 5, 3)
     inputs['STUDENT_PERFORMANCE_RATING'] = st.slider("Performance Rating (1-5)", 1, 5, 3)
-    inputs['NO_SKILLS'] = st.radio("Has No Skills?", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes", index=0)
-    inputs['Year_of_Graduate'] = st.number_input("Year of Graduation", 2019, 2025, 2022)
+    inputs['NO_SKILLS'] = st.radio("Has No Skills?", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
+    inputs['Year_of_Graduate'] = st.number_input("Year of Graduation", 2019, 2025, 2023)
 
-# 📋 Convert Inputs to DataFrame
+# Convert to DataFrame
 input_df = pd.DataFrame([inputs])[feature_columns]
 
-# 📋 Prediction Function
-def predict_employability(model, scaler, input_df):
-    scaled_input = scaler.transform(input_df)
-    prediction = model.predict(scaled_input)
-    prediction_proba = model.predict_proba(scaled_input)[0]
-    return prediction[0], prediction_proba
 
-# 📋 Predict Button
+# Predict
+def predict(model, input_df):
+    pred = model.predict(input_df)[0]
+    proba = model.predict_proba(input_df)[0]
+    return pred, proba
+
+
+# Button
 if st.button("Predict"):
-    pred, proba = predict_employability(model, scaler, input_df)
+    pred, proba = predict(model, input_df)
+    predicted_class = label_encoder.inverse_transform([pred])[0]
 
-    if pred == 1:
-        st.success("🎉 The student is predicted to be **Employable**!")
+    st.markdown("---")
+    if predicted_class == "Employable":
+        st.success(f"🎉 The student is predicted to be **{predicted_class}**!")
         st.balloons()
     else:
-        st.warning("⚠️ The student is predicted to be **Less Employable**.")
+        st.warning(f"⚠️ The student is predicted to be **{predicted_class}**.")
 
-    st.info(f"📈 Probability of being Employable: **{proba[1]*100:.2f}%**")
-    st.info(f"📉 Probability of being Less Employable: **{proba[0]*100:.2f}%**")
+    st.info(f"📈 Probability of being Employable: **{proba[0] * 100:.2f}%**")
+    st.info(f"📉 Probability of being Less Employable: **{proba[1] * 100:.2f}%**")
 
-# 📋 Footer
+# Footer
 st.markdown("---")
 st.caption("""
 Disclaimer: This prediction model is for research and informational purposes only.  
